@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hợp đồng đặt cọc - Plush Doll Custom</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .email-container {
+            max-width: 1000px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background-color: #1c27b4;
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .content {
+            padding: 30px 20px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 18px;
+            color: #1c27b4;
+        }
+
+        .contract-code {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .contract-code span {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1c27b4;
+            background-color: #eef2ff;
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 8px;
+            letter-spacing: 2px;
+        }
+
+        .footer {
+            background-color: #f9f9f9;
+            text-align: center;
+            padding: 20px;
+            font-size: 14px;
+            color: #777;
+        }
+
+        .footer a {
+            color: #1c27b4;
+            text-decoration: none;
+        }
+
+        @media (max-width: 600px) {
+
+            .content,
+            .header,
+            .footer {
+                padding: 20px;
+            }
+
+            .contract-code span {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>Hợp đồng đặt cọc</h1>
+        </div>
+
+        <div class="content">
+            <div class="contract-code">
+                <span>Mã hợp đồng: {ContractCode}</span>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Thông tin bên A (Người đặt):</div>
+                <p>Họ tên: <strong>{UserAName}</strong></p>
+                <p>Email: <strong>{UserAEmail}</strong></p>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Thông tin bên B (Người nhận đơn):</div>
+                <p>Họ tên: <strong>{UserBName}</strong></p>
+                <p>Email: <strong>{UserBEmail}</strong></p>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Thông tin hợp đồng:</div>
+                <p>Số tiền đặt cọc: <strong>{DepositAmount} VNĐ</strong></p>
+                <p>Thời hạn hoàn thành: <strong>{DueDate}</strong></p>
+                <p>Ngày ký hợp đồng: <strong>{SignDate}</strong></p>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Điều khoản:</div>
+                <ul>
+                    <li>Bên A đồng ý đặt cọc trước số tiền nêu trên cho Bên B.</li>
+                    <li>Bên B cam kết hoàn thành sản phẩm/dịch vụ đúng thời hạn.</li>
+                    <li>Nếu Bên B không hoàn thành đúng hạn, Bên A có quyền yêu cầu hoàn trả đặt cọc.</li>
+                    <li>Hai bên tự nguyện cam kết thực hiện đúng nội dung hợp đồng.</li>
+                </ul>
+            </div>
+
+            <p>Xin cảm ơn quý khách đã sử dụng dịch vụ của Plush Doll Custom!</p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 Plush Doll Custom. All rights reserved.</p>
+            <p><a href="mailto:plushdollcustom@gmail.com">Liên hệ hỗ trợ</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

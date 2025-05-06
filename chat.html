@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chat Client</title>
+</head>
+
+<body>
+    <h2>🔐 Đăng nhập</h2>
+    <input type="text" id="username" placeholder="Tên đăng nhập" style="width: 200px;" />
+    <input type="password" id="password" placeholder="Mật khẩu" style="width: 200px;" />
+    <button onclick="signIn()">Đăng nhập</button>
+
+    <h2>👤 Thông tin Profile:</h2>
+    <div id="profile-details"></div>
+
+    <h2>💬 Chat</h2>
+    <input type="text" id="roomId" placeholder="Nhập Room ID (GUID)" style="width: 300px;" />
+    <button onclick="joinChatRoom()">Tham gia phòng</button>
+    <br><br>
+    <div id="chat-box"
+        style="border: 1px solid #ccc; height: 200px; overflow-y: scroll; padding: 10px; background-color: #f9f9f9;">
+    </div>
+    <br>
+    <input type="text" id="chat-message" placeholder="Nhập tin nhắn..." style="width: 300px;" />
+    <button onclick="sendMessage()">📨 Gửi</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+
+    <script>
+        let connection;
+        let accountId = null;
+        let currentRoom = null;
+
+        // Đăng nhập người dùng
+        function signIn() {
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+
+            if (!username || !password) {
+                alert("Vui lòng nhập đầy đủ thông tin!");
+                return;
+            }
+
+            fetch("https://localhost:7229/api/v1/auth/sign-in", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const token = data.responseRequestModel.jwtToken.accessToken;
+                        accountId = data.responseRequestModel.accountID;
+                        sessionStorage.setItem("accessToken", token);
+                        sessionStorage.setItem("accountId", accountId);
+                        getProfileInfo(token);
+                        connectToChatHub(token);
+                    } else {
+                        alert("Đăng nhập thất bại: " + data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi đăng nhập:", err);
+                    alert("Lỗi khi đăng nhập.");
+                });
+        }
+
+        // Lấy thông tin profile sau khi đăng nhập
+        function getProfileInfo(token) {
+            fetch('https://localhost:7229/api/v1/auth/profile', {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + token }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const p = data.responseRequestModel;
+                        document.getElementById("profile-details").innerHTML = ` 
+                            <strong>Full Name:</strong> ${p.fullName} <br>
+                            <strong>Email:</strong> ${p.email} <br>
+                            <strong>Phone:</strong> ${p.phoneNumber} <br>
+                            <strong>Gender:</strong> ${p.genderDisplay} <br>
+                            <strong>Role:</strong> ${p.roleDisplay} <br>
+                            <strong>Created At:</strong> ${p.createdAt}
+                        `;
+                    } else {
+                        document.getElementById("profile-details").innerText = "Không thể lấy thông tin profile.";
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi lấy profile:", err);
+                    document.getElementById("profile-details").innerText = "Lỗi khi lấy profile.";
+                });
+        }
+
+        // Kết nối đến SignalR ChatHub
+        function connectToChatHub(token) {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl("https://localhost:7229/chatHub", {
+                    accessTokenFactory: () => token
+                })
+                .withAutomaticReconnect()
+                .build();
+
+            // Lắng nghe sự kiện "ReceiveMessage" từ backend
+            connection.on("ReceiveMessage", (senderIdOrObject, messageParam) => {
+                const chatBox = document.getElementById("chat-box");
+                const msgElement = document.createElement("div");
+                
+                // Kiểm tra xem có phải là object ChatMessage hay không
+                if (typeof senderIdOrObject === 'object' && senderIdOrObject !== null) {
+                    // Trường hợp nhận từ Clients.All.SendAsync
+                    const messageObj = senderIdOrObject;
+                    msgElement.innerHTML = `<strong>${messageObj.senderId}:</strong> ${messageObj.message} <em>(${new Date(messageObj.time).toLocaleTimeString()})</em>`;
+                } else {
+                    // Trường hợp nhận từ Clients.Group.SendAsync
+                    const senderId = senderIdOrObject;
+                    const message = messageParam;
+                    msgElement.innerHTML = `<strong>${senderId}:</strong> ${message} <em>(${new Date().toLocaleTimeString()})</em>`;
+                }
+                
+                chatBox.appendChild(msgElement);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+
+            connection.start()
+                .then(() => {
+                    console.log("✅ Đã kết nối ChatHub");
+                })
+                .catch(err => {
+                    console.error("Lỗi khi kết nối ChatHub:", err);
+                });
+        }
+
+        // Tham gia phòng chat bằng cách gửi request trực tiếp đến API
+        function joinChatRoom() {
+            const roomId = document.getElementById("roomId").value.trim();
+            if (!roomId) {
+                alert("Vui lòng nhập Room ID!");
+                return;
+            }
+
+            const token = sessionStorage.getItem("accessToken");
+            
+            // Hiển thị thông báo trong chatbox
+            const chatBox = document.getElementById("chat-box");
+            const msgElement = document.createElement("div");
+            msgElement.innerHTML = `<em>Đang xử lý tham gia phòng ${roomId}...</em>`;
+            chatBox.appendChild(msgElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            
+            currentRoom = roomId;
+            
+            // API nhantin + roomID
+            fetch("https://localhost:7229/nhantin?" + new URLSearchParams({ 
+                room: roomId, 
+                message: "[JOIN_ROOM]" // Sử dụng chuỗi đặc biệt để đánh dấu đây là request tham gia phòng
+            }), {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token
+                }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error("Lỗi khi tham gia phòng");
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.message === "Sent") {
+                    const chatBox = document.getElementById("chat-box");
+                    const joinMsg = document.createElement("div");
+                    joinMsg.innerHTML = `<em>Bạn đã tham gia phòng ${roomId} thành công</em>`;
+                    chatBox.appendChild(joinMsg);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    console.log(`✅ Đã tham gia vào phòng: ${roomId}`);
+                }
+            })
+            .catch(err => {
+                console.error("Lỗi khi tham gia phòng chat:", err);
+                const chatBox = document.getElementById("chat-box");
+                const errorMsg = document.createElement("div");
+                errorMsg.innerHTML = `<em style="color: red">Lỗi khi tham gia phòng: ${err.message}</em>`;
+                chatBox.appendChild(errorMsg);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+        }
+
+        // Gửi tin nhắn qua API
+        function sendMessage() {
+            const room = document.getElementById("roomId").value.trim();
+            const message = document.getElementById("chat-message").value.trim();
+            const token = sessionStorage.getItem("accessToken");
+
+            if (!room || !message) {
+                alert("Vui lòng nhập Room ID và tin nhắn!");
+                return;
+            }
+
+            fetch("https://localhost:7229/nhantin?" + new URLSearchParams({ room, message }), {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token
+                }
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.message === "Sent") {
+                        document.getElementById("chat-message").value = "";
+                    }
+                })
+                .catch(err => console.error("Lỗi khi gửi tin nhắn:", err));
+        }
+    </script>
+</body>
+
+</html>
