@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chat Client V2</title>
+</head>
+
+<body>
+    <h2>🔐 Đăng nhập</h2>
+    <input type="text" id="username" placeholder="Tên đăng nhập" style="width: 200px;" />
+    <input type="password" id="password" placeholder="Mật khẩu" style="width: 200px;" />
+    <button onclick="signIn()">Đăng nhập</button>
+
+    <h2>👤 Thông tin Profile:</h2>
+    <div id="profile-details"></div>
+
+    <h2>💬 Chat</h2>
+    <input type="text" id="roomId" placeholder="Nhập Room ID (GUID)" style="width: 300px;" />
+    <button onclick="joinChatRoom()">Tham gia phòng</button>
+    <br><br>
+    <div id="chat-box"
+        style="border: 1px solid #ccc; height: 200px; overflow-y: scroll; padding: 10px; background-color: #f9f9f9;">
+    </div>
+    <br>
+    <input type="text" id="chat-message" placeholder="Nhập tin nhắn..." style="width: 300px;" />
+    <button onclick="sendMessage()">📨 Gửi</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+
+    <script>
+        let connection;
+        let accountId = null;
+        let currentRoom = null;
+
+        function signIn() {
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+
+            if (!username || !password) {
+                alert("Vui lòng nhập đầy đủ thông tin!");
+                return;
+            }
+
+            fetch("https://pdcbackendapi.tlog.website/api/v1/auth/sign-in", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const token = data.responseRequestModel.jwtToken.accessToken;
+                        accountId = data.responseRequestModel.accountID;
+                        sessionStorage.setItem("accessToken", token);
+                        sessionStorage.setItem("accountId", accountId);
+                        getProfileInfo(token);
+                        connectToChatHub(token);
+                    } else {
+                        alert("Đăng nhập thất bại: " + data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi đăng nhập:", err);
+                    alert("Lỗi khi đăng nhập.");
+                });
+        }
+
+        function getProfileInfo(token) {
+            fetch('https://pdcbackendapi.tlog.website/api/v1/auth/profile', {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + token }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const p = data.responseRequestModel;
+                        document.getElementById("profile-details").innerHTML = ` 
+                            <strong>Full Name:</strong> ${p.fullName} <br>
+                            <strong>Email:</strong> ${p.email} <br>
+                            <strong>Phone:</strong> ${p.phoneNumber} <br>
+                            <strong>Gender:</strong> ${p.genderDisplay} <br>
+                            <strong>Role:</strong> ${p.roleDisplay} <br>
+                            <strong>Created At:</strong> ${p.createdAt}
+                        `;
+                    } else {
+                        document.getElementById("profile-details").innerText = "Không thể lấy thông tin profile.";
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi lấy profile:", err);
+                    document.getElementById("profile-details").innerText = "Lỗi khi lấy profile.";
+                });
+        }
+
+        function connectToChatHub(token) {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl("https://pdcbackendapi.tlog.website/chatHub", {
+                    accessTokenFactory: () => token
+                })
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("ReceiveMessage", (senderIdOrObject, messageParam) => {
+                const chatBox = document.getElementById("chat-box");
+                const msgElement = document.createElement("div");
+
+                if (typeof senderIdOrObject === 'object' && senderIdOrObject !== null) {
+                    const messageObj = senderIdOrObject;
+                    msgElement.innerHTML = `<strong>${messageObj.senderId}:</strong> ${messageObj.message} <em>(${new Date(messageObj.time).toLocaleTimeString()})</em>`;
+                } else {
+                    const senderId = senderIdOrObject;
+                    const message = messageParam;
+                    msgElement.innerHTML = `<strong>${senderId}:</strong> ${message} <em>(${new Date().toLocaleTimeString()})</em>`;
+                }
+
+                chatBox.appendChild(msgElement);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+
+            connection.start()
+                .then(() => {
+                    console.log("✅ Đã kết nối ChatHub");
+                })
+                .catch(err => {
+                    console.error("Lỗi khi kết nối ChatHub:", err);
+                });
+        }
+
+        function joinChatRoom() {
+            const roomId = document.getElementById("roomId").value.trim();
+            if (!roomId) {
+                alert("Vui lòng nhập Room ID!");
+                return;
+            }
+
+            const token = sessionStorage.getItem("accessToken");
+
+            const chatBox = document.getElementById("chat-box");
+            const msgElement = document.createElement("div");
+            msgElement.innerHTML = `<em>Đang xử lý tham gia phòng ${roomId}...</em>`;
+            chatBox.appendChild(msgElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            currentRoom = roomId;
+
+            fetch("https://pdcbackendapi.tlog.website/api/v1/chat?" + new URLSearchParams({
+                room: roomId,
+                message: "[JOIN_ROOM]"
+            }), {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token
+                }
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const joinMsg = document.createElement("div");
+                        joinMsg.innerHTML = `<em>${data.responseRequestModel.message}</em>`;
+                        chatBox.appendChild(joinMsg);
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        console.log(`✅ Đã tham gia vào phòng: ${roomId}`);
+                    } else {
+                        throw new Error(data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi tham gia phòng chat:", err);
+                    const errorMsg = document.createElement("div");
+                    errorMsg.innerHTML = `<em style="color: red">Lỗi khi tham gia phòng: ${err.message}</em>`;
+                    chatBox.appendChild(errorMsg);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                });
+        }
+
+        function sendMessage() {
+            const room = document.getElementById("roomId").value.trim();
+            const message = document.getElementById("chat-message").value.trim();
+            const token = sessionStorage.getItem("accessToken");
+
+            if (!room || !message) {
+                alert("Vui lòng nhập Room ID và tin nhắn!");
+                return;
+            }
+
+            fetch("https://pdcbackendapi.tlog.website/api/v1/chat?" + new URLSearchParams({ room, message }), {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token
+                }
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        document.getElementById("chat-message").value = "";
+                        console.log(data.responseRequestModel.message);
+                    } else {
+                        alert("Lỗi gửi tin nhắn: " + data.message);
+                    }
+                })
+                .catch(err => console.error("Lỗi khi gửi tin nhắn:", err));
+        }
+    </script>
+</body>
+
+</html>
