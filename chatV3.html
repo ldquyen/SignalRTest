@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chat Client V2</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .message-input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .file-input-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .preview-image {
+            max-width: 200px;
+            max-height: 200px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        
+        .message-type-selector {
+            margin: 10px 0;
+        }
+        
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        
+        .chat-message.own {
+            background-color: #e3f2fd;
+            text-align: right;
+        }
+        
+        .chat-message.other {
+            background-color: #f5f5f5;
+        }
+        
+        .message-image {
+            max-width: 300px;
+            max-height: 300px;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="section">
+        <h2>🔐 Đăng nhập</h2>
+        <input type="text" id="username" placeholder="Tên đăng nhập" style="width: 200px;" />
+        <input type="password" id="password" placeholder="Mật khẩu" style="width: 200px;" />
+        <button onclick="signIn()">Đăng nhập</button>
+    </div>
+
+    <div class="section">
+        <h2>👤 Thông tin Profile:</h2>
+        <div id="profile-details"></div>
+    </div>
+
+    <div class="section">
+        <h2>💬 Chat</h2>
+        <input type="text" id="roomId" placeholder="Nhập Room ID (GUID)" style="width: 300px;" />
+        <button onclick="joinChatRoom()">Tham gia phòng</button>
+        <br><br>
+        
+        <div id="chat-box"
+            style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; background-color: #f9f9f9;">
+        </div>
+        
+        <div class="message-type-selector">
+            <label>
+                <input type="radio" name="messageType" value="0" checked> 📝 Tin nhắn văn bản
+            </label>
+            <label style="margin-left: 20px;">
+                <input type="radio" name="messageType" value="1"> 🖼️ Gửi hình ảnh
+            </label>
+        </div>
+        
+        <div class="message-input-container">
+            <input type="text" id="chat-message" placeholder="Nhập tin nhắn..." style="width: 300px;" />
+            <button onclick="sendMessage()">📨 Gửi</button>
+        </div>
+        
+        <div class="file-input-container" id="file-input-container" style="display: none;">
+            <input type="file" id="image-file" accept=".jpg,.jpeg,.png" />
+            <button onclick="clearImagePreview()">🗑️ Xóa ảnh</button>
+        </div>
+        
+        <div id="image-preview-container"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+
+    <script>
+        let connection;
+        let accountId = null;
+        let currentRoom = null;
+        let currentUserInfo = null;
+
+        // Xử lý thay đổi loại tin nhắn
+        document.addEventListener('DOMContentLoaded', function() {
+            const messageTypeRadios = document.querySelectorAll('input[name="messageType"]');
+            messageTypeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    toggleMessageInputType();
+                });
+            });
+        });
+
+        function toggleMessageInputType() {
+            const selectedType = document.querySelector('input[name="messageType"]:checked').value;
+            const fileContainer = document.getElementById('file-input-container');
+            const textInput = document.getElementById('chat-message');
+            
+            if (selectedType === '1') { // Image message (MessageTypeEnum.Image = 1)
+                fileContainer.style.display = 'flex';
+                textInput.placeholder = 'Mô tả cho ảnh (tùy chọn)...';
+            } else { // Text message (MessageTypeEnum.Text = 0)
+                fileContainer.style.display = 'none';
+                textInput.placeholder = 'Nhập tin nhắn...';
+                clearImagePreview();
+            }
+        }
+
+        function clearImagePreview() {
+            document.getElementById('image-file').value = '';
+            document.getElementById('image-preview-container').innerHTML = '';
+        }
+
+        // Xem trước ảnh khi chọn file
+        document.addEventListener('DOMContentLoaded', function() {
+            const imageInput = document.getElementById('image-file');
+            if (imageInput) {
+                imageInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    const previewContainer = document.getElementById('image-preview-container');
+                    
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            previewContainer.innerHTML = `
+                                <div style="margin-top: 10px;">
+                                    <p><strong>Xem trước ảnh:</strong></p>
+                                    <img src="${e.target.result}" class="preview-image" alt="Preview" />
+                                    <p><em>Kích thước: ${(file.size / 1024 / 1024).toFixed(2)} MB</em></p>
+                                </div>
+                            `;
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        previewContainer.innerHTML = '';
+                    }
+                });
+            }
+        });
+
+        function signIn() {
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+
+            if (!username || !password) {
+                alert("Vui lòng nhập đầy đủ thông tin!");
+                return;
+            }
+
+            fetch("https://localhost:7229/api/v1/auth/sign-in", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const token = data.responseRequestModel.jwtToken.accessToken;
+                        accountId = data.responseRequestModel.accountID;
+                        currentUserInfo = data.responseRequestModel;
+                        sessionStorage.setItem("accessToken", token);
+                        sessionStorage.setItem("accountId", accountId);
+                        getProfileInfo(token);
+                        connectToChatHub(token);
+                    } else {
+                        alert("Đăng nhập thất bại: " + data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi đăng nhập:", err);
+                    alert("Lỗi khi đăng nhập.");
+                });
+        }
+
+        function getProfileInfo(token) {
+            fetch('https://localhost:7229/api/v1/auth/profile', {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + token }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const p = data.responseRequestModel;
+                        document.getElementById("profile-details").innerHTML = ` 
+                            <strong>Full Name:</strong> ${p.fullName} <br>
+                            <strong>Email:</strong> ${p.email} <br>
+                            <strong>Phone:</strong> ${p.phoneNumber} <br>
+                            <strong>Gender:</strong> ${p.genderDisplay} <br>
+                            <strong>Role:</strong> ${p.roleDisplay} <br>
+                            <strong>Created At:</strong> ${p.createdAt}
+                        `;
+                    } else {
+                        document.getElementById("profile-details").innerText = "Không thể lấy thông tin profile.";
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi lấy profile:", err);
+                    document.getElementById("profile-details").innerText = "Lỗi khi lấy profile.";
+                });
+        }
+
+        function connectToChatHub(token) {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl("https://localhost:7229/chatHub", {
+                    accessTokenFactory: () => token
+                })
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("ReceiveMessage", (senderId, messageObj) => {
+                const chatBox = document.getElementById("chat-box");
+                const msgElement = document.createElement("div");
+                msgElement.className = "chat-message";
+
+                const message = messageObj.message;
+                const messageType = messageObj.messageType;
+                const isOwnMessage = senderId === accountId;
+                
+                if (isOwnMessage) {
+                    msgElement.classList.add("own");
+                } else {
+                    msgElement.classList.add("other");
+                }
+
+                let messageContent = '';
+                // MessageTypeEnum.Image = 1
+                if (messageType === 'Image' || messageType === 1 || messageType === '1') {
+                    messageContent = `
+                        <strong>${senderId}:</strong> 
+                        <br><img src="${message}" class="message-image" alt="Shared image" onclick="openImageModal('${message}')" style="cursor: pointer;" />
+                        <br><em>(${new Date().toLocaleTimeString()})</em>
+                    `;
+                } else {
+                    messageContent = `<strong>${senderId}:</strong> ${message} <em>(${new Date().toLocaleTimeString()})</em>`;
+                }
+
+                msgElement.innerHTML = messageContent;
+                chatBox.appendChild(msgElement);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+
+            connection.start()
+                .then(() => {
+                    console.log("✅ Đã kết nối ChatHub");
+                })
+                .catch(err => {
+                    console.error("Lỗi khi kết nối ChatHub:", err);
+                });
+        }
+
+        function openImageModal(imageSrc) {
+            // Tạo modal để xem ảnh full size
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background-color: rgba(0,0,0,0.8); display: flex;
+                justify-content: center; align-items: center; z-index: 1000;
+            `;
+            
+            const img = document.createElement('img');
+            img.src = imageSrc;
+            img.style.cssText = 'max-width: 90%; max-height: 90%; border-radius: 10px;';
+            
+            modal.appendChild(img);
+            modal.onclick = () => document.body.removeChild(modal);
+            
+            document.body.appendChild(modal);
+        }
+
+        function joinChatRoom() {
+            const roomId = document.getElementById("roomId").value.trim();
+            if (!roomId) {
+                alert("Vui lòng nhập Room ID!");
+                return;
+            }
+
+            const token = sessionStorage.getItem("accessToken");
+            const chatBox = document.getElementById("chat-box");
+            const msgElement = document.createElement("div");
+            msgElement.innerHTML = `<em>Đang xử lý tham gia phòng ${roomId}...</em>`;
+            chatBox.appendChild(msgElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            currentRoom = roomId;
+
+            const formData = new FormData();
+            formData.append('RoomChatID', roomId);
+            formData.append('Message', '[JOIN_ROOM]');
+            formData.append('MessageType', '1');
+
+            fetch("https://localhost:7229/api/v1/chat", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token
+                },
+                body: formData
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.isSuccess) {
+                        const joinMsg = document.createElement("div");
+                        joinMsg.innerHTML = `<em>${data.responseRequestModel.message}</em>`;
+                        chatBox.appendChild(joinMsg);
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        console.log(`✅ Đã tham gia vào phòng: ${roomId}`);
+                    } else {
+                        throw new Error(data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi tham gia phòng chat:", err);
+                    const errorMsg = document.createElement("div");
+                    errorMsg.innerHTML = `<em style="color: red">Lỗi khi tham gia phòng: ${err.message}</em>`;
+                    chatBox.appendChild(errorMsg);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                });
+        }
+
+        function sendMessage() {
+            const room = document.getElementById("roomId").value.trim();
+            const message = document.getElementById("chat-message").value.trim();
+            const token = sessionStorage.getItem("accessToken");
+            const selectedType = document.querySelector('input[name="messageType"]:checked').value;
+            const imageFile = document.getElementById("image-file").files[0];
+
+            if (!room) {
+                alert("Vui lòng nhập Room ID!");
+                return;
+            }
+
+            // Kiểm tra điều kiện dựa trên loại tin nhắn
+            if (selectedType === '2') { // Image message
+                if (!imageFile) {
+                    alert("Vui lòng chọn ảnh để gửi!");
+                    return;
+                }
+                
+                // Kiểm tra định dạng file
+                const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+                if (!allowedTypes.includes(imageFile.type)) {
+                    alert("Chỉ chấp nhận file ảnh định dạng JPG, JPEG, PNG!");
+                    return;
+                }
+                
+                // Kiểm tra kích thước file (2MB)
+                if (imageFile.size > 2 * 1024 * 1024) {
+                    alert("Kích thước ảnh không được vượt quá 2MB!");
+                    return;
+                }
+            } else { // Text message
+                if (!message) {
+                    alert("Vui lòng nhập tin nhắn!");
+                    return;
+                }
+            }
+
+            // Tạo FormData để gửi
+            const formData = new FormData();
+            formData.append('RoomChatID', room);
+            formData.append('MessageType', selectedType);
+            
+            if (selectedType === '2') {
+                // Gửi ảnh
+                formData.append('Message', message || 'Đã gửi một hình ảnh');
+                formData.append('Image', imageFile);
+            } else {
+                // Gửi tin nhắn văn bản
+                formData.append('Message', message);
+            }
+
+            // Hiển thị trạng thái đang gửi
+            const chatBox = document.getElementById("chat-box");
+            const sendingMsg = document.createElement("div");
+            sendingMsg.innerHTML = `<em style="color: #666;">Đang gửi${selectedType === '2' ? ' ảnh' : ''}...</em>`;
+            chatBox.appendChild(sendingMsg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            fetch("https://localhost:7229/api/v1/chat", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token
+                },
+                body: formData
+            })
+                .then(res => res.json())
+                .then(data => {
+                    // Xóa thông báo đang gửi
+                    chatBox.removeChild(sendingMsg);
+                    
+                    if (data.isSuccess) {
+                        // Xóa input sau khi gửi thành công
+                        document.getElementById("chat-message").value = "";
+                        if (selectedType === '2') {
+                            clearImagePreview();
+                        }
+                        console.log("Đã gửi:", data.responseRequestModel.message);
+                    } else {
+                        alert("Lỗi gửi tin nhắn: " + data.message);
+                    }
+                })
+                .catch(err => {
+                    // Xóa thông báo đang gửi
+                    chatBox.removeChild(sendingMsg);
+                    console.error("Lỗi khi gửi tin nhắn:", err);
+                    alert("Lỗi khi gửi tin nhắn: " + err.message);
+                });
+        }
+
+        // Cho phép gửi tin nhắn bằng Enter
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatInput = document.getElementById('chat-message');
+            if (chatInput) {
+                chatInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        sendMessage();
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

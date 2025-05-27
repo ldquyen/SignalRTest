@@ -101,22 +101,19 @@
                 .withAutomaticReconnect()
                 .build();
 
-            connection.on("ReceiveMessage", (senderIdOrObject, messageParam) => {
+            connection.on("ReceiveMessage", (senderId, messageObj) => {
                 const chatBox = document.getElementById("chat-box");
                 const msgElement = document.createElement("div");
 
-                if (typeof senderIdOrObject === 'object' && senderIdOrObject !== null) {
-                    const messageObj = senderIdOrObject;
-                    msgElement.innerHTML = `<strong>${messageObj.senderId}:</strong> ${messageObj.message} <em>(${new Date(messageObj.time).toLocaleTimeString()})</em>`;
-                } else {
-                    const senderId = senderIdOrObject;
-                    const message = messageParam;
-                    msgElement.innerHTML = `<strong>${senderId}:</strong> ${message} <em>(${new Date().toLocaleTimeString()})</em>`;
-                }
+                const message = messageObj.message;
+                const messageType = messageObj.messageType;
+
+                msgElement.innerHTML = `<strong>${senderId} (${messageType}):</strong> ${message} <em>(${new Date().toLocaleTimeString()})</em>`;
 
                 chatBox.appendChild(msgElement);
                 chatBox.scrollTop = chatBox.scrollHeight;
             });
+
 
             connection.start()
                 .then(() => {
@@ -144,15 +141,19 @@
 
             currentRoom = roomId;
 
-            fetch("https://pdcbackendapi.tlog.website/api/v1/chat?" + new URLSearchParams({
-                room: roomId,
-                message: "[JOIN_ROOM]"
-            }), {
+            fetch("https://pdcbackendapi.tlog.website/api/v1/chat", {
                 method: "POST",
                 headers: {
+                    "Content-Type": "application/json",
                     "Authorization": "Bearer " + token
-                }
+                },
+                body: JSON.stringify({
+                    roomChatID: roomId,
+                    message: "[JOIN_ROOM]",
+                    messageType: 0
+                })
             })
+
                 .then(res => res.json())
                 .then(data => {
                     if (data.isSuccess) {

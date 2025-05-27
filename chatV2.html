@@ -101,22 +101,19 @@
                 .withAutomaticReconnect()
                 .build();
 
-            connection.on("ReceiveMessage", (senderIdOrObject, messageParam) => {
+            connection.on("ReceiveMessage", (senderId, messageObj) => {
                 const chatBox = document.getElementById("chat-box");
                 const msgElement = document.createElement("div");
 
-                if (typeof senderIdOrObject === 'object' && senderIdOrObject !== null) {
-                    const messageObj = senderIdOrObject;
-                    msgElement.innerHTML = `<strong>${messageObj.senderId}:</strong> ${messageObj.message} <em>(${new Date(messageObj.time).toLocaleTimeString()})</em>`;
-                } else {
-                    const senderId = senderIdOrObject;
-                    const message = messageParam;
-                    msgElement.innerHTML = `<strong>${senderId}:</strong> ${message} <em>(${new Date().toLocaleTimeString()})</em>`;
-                }
+                const message = messageObj.message;
+                const messageType = messageObj.messageType;
+
+                msgElement.innerHTML = `<strong>${senderId} (${messageType}):</strong> ${message} <em>(${new Date().toLocaleTimeString()})</em>`;
 
                 chatBox.appendChild(msgElement);
                 chatBox.scrollTop = chatBox.scrollHeight;
             });
+
 
             connection.start()
                 .then(() => {
@@ -144,14 +141,17 @@
 
             currentRoom = roomId;
 
-            fetch("https://localhost:7229/api/v1/chat?" + new URLSearchParams({
-                room: roomId,
-                message: "[JOIN_ROOM]"
-            }), {
+            fetch("https://localhost:7229/api/v1/chat", {
                 method: "POST",
                 headers: {
-                    "Authorization": "Bearer " + token
-                }
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    roomChatID: roomId,
+                    message: "[JOIN_ROOM]",
+                    messageType: 1
+                })
             })
                 .then(res => res.json())
                 .then(data => {
@@ -184,17 +184,23 @@
                 return;
             }
 
-            fetch("https://localhost:7229/api/v1/chat?" + new URLSearchParams({ room, message }), {
+            fetch("https://localhost:7229/api/v1/chat", {
                 method: "POST",
                 headers: {
-                    "Authorization": "Bearer " + token
-                }
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    roomChatID: room,
+                    message: message,
+                    messageType: 0
+                })
             })
                 .then(res => res.json())
                 .then(data => {
                     if (data.isSuccess) {
                         document.getElementById("chat-message").value = "";
-                        console.log(data.responseRequestModel.message);
+                        console.log("Đã gửi:", data.responseRequestModel.message);
                     } else {
                         alert("Lỗi gửi tin nhắn: " + data.message);
                     }

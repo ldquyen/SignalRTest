@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login and Get Profile</title>
+</head>
+
+<body>
+    <form id="loginForm">
+        <label>Email:</label><br />
+        <input type="email" id="email" required /><br /><br />
+
+        <label>Password:</label><br />
+        <input type="password" id="password" required /><br /><br />
+
+        <button type="submit">Đăng nhập</button>
+    </form>
+
+    <h3>Thông tin tài khoản:</h3>
+    <pre id="profile"></pre>
+
+    <script>
+        const loginUrl = "http://103.216.119.189/api/Authentication/login";
+        const profileUrl = "http://103.216.119.189/api/Account/profile";
+
+        const loginForm = document.getElementById("loginForm");
+        const profileDiv = document.getElementById("profile");
+
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById("email").value;
+            const password = document.getElementById("password").value;
+
+            try {
+                // Gửi yêu cầu login
+                const loginResponse = await fetch(loginUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (!loginResponse.ok) {
+                    throw new Error("Đăng nhập thất bại");
+                }
+
+                const loginResult = await loginResponse.json();
+                const token = loginResult.token;
+
+                // Gọi API profile với token
+                const profileResponse = await fetch(profileUrl, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+
+                if (!profileResponse.ok) {
+                    throw new Error("Lấy thông tin profile thất bại");
+                }
+
+                const profileResult = await profileResponse.json();
+                profileDiv.textContent = JSON.stringify(profileResult.data, null, 2);
+            } catch (err) {
+                profileDiv.textContent = "❌ Lỗi: " + err.message;
+            }
+        });
+    </script>
+</body>
+
+</html>
